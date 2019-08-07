@@ -11,6 +11,6 @@ jobs:
             echo 'Hello World!'
             echo 'This is the delivery pipeline'
             gradle jar
-            - store_artifacts:
-            path:/art/
-            destination: prefix
+              store_artifacts:
+              path:/art/
+              destination: prefix
