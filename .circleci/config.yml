@@ -13,5 +13,5 @@ jobs:
             echo 'This is the delivery pipeline'
             gradle jar
      - store_artifacts:
-        path: /tmp/artifacts
+        path: /art
             
