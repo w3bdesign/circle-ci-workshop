@@ -5,12 +5,12 @@ jobs:
       - image: circleci/openjdk:8-jdk
     steps:
      - checkout
+     - store_artifacts:
+       path: /code/test-results    
      - run:
           name: The First Step
           command: |
             echo 'Hello World!'
             echo 'This is the delivery pipeline'
             gradle jar
-              - store_artifacts:
-              path:/art/
-              destination: prefix
+            
