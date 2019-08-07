@@ -10,4 +10,7 @@ jobs:
           command: |
             echo 'Hello World!'
             echo 'This is the delivery pipeline'
-            gradle test
+            gradle jar
+            - store_artifacts:
+            path:/art/
+            destination: prefix
