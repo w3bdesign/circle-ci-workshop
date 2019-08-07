@@ -6,7 +6,7 @@ jobs:
     steps:
      - checkout
      - store_artifacts:
-      path: /code/test-results    
+       path: /code/test-results    
      - run:
           name: The First Step
           command: |
