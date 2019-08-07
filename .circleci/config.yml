@@ -11,7 +11,10 @@ jobs:
           command: |
             echo 'Hello World!'
             echo 'This is the delivery pipeline'
+            echo "my artifact file" > /tmp/artifact-1;
+            mkdir /tmp/artifacts;
+            echo "my artifact files in a dir" > /tmp/artifacts/artifact-2;
             gradle jar
      - store_artifacts:
-        path: /art
+        path: /tmp/artifact-1
             
