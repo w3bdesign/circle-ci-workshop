@@ -6,20 +6,19 @@ This workshop will go through the basic steps in their system, making you able t
 
 > Note: at the time of writing, CircleCI has a free tier with 2,5 build hours per week. This should be enough for this exercise, but it's not an "all you can eat" buffet :)
 
-## Coding Assignment
+## Build in ci code
 
-While the purpose is to learn CircleCI, there will also be some coding involved.
+This workshop is not about making the nitty gritty details of how to build, but making you comfortable with CircleCI terminology.
 
-This is done just to give you some tangible code to work with:
-Remember, this is not a programming exercise, but a CI one; code is only there so you have something to build :)
+Therefore we have made a small application with all the ci scripts around it to build,test,and package the application, all stored under the `ci` folder.
 
-This repository comes with a gradle based java project from the start, but any language can be used. If you want to, just replace the java code with one of the other languages from this [GildedRose Refactoring Kata](https://github.com/emilybache/GildedRose-Refactoring-Kata) repository.
+We ultimately want a pipeline that has the following jobs:
 
-Just clone the repository listed above and replace with your language of choice.
-
-> Some of the tasks makes the assumption that you are using Gradle as your build system. If you replace the code, you need to find other ways to make test and code compilation, so its probably good to choose a languages you are comfortable with.
-
-The description of the application can be read [here](gildedrose.md), but is not necessary to read just yet.
+* **Clone down:** makes the git clone, and prepares the repo for being distributed to the parallel steps
+* **Test:** runs the gradle test command found in [ci/unit-test-app.sh](ci/unit-test-app.sh)
+* **Build:** runs the gradle build command found in [ci/build-app.sh](ci/build-app.sh)
+* **Build docker:** runs both [building of the docker image](ci/build-docker.sh), and [pushes it up to the hub](ci/push-docker.sh)
+* **Component test:** runs a [docker-compose file](component-test/docker-compose.yml) with a [python test](component-test/test_app.py) to test the application.
 
 ## Setup
 
@@ -94,9 +93,9 @@ As a next step, we want CircleCI to actually clone our project, build the code a
 
 ### Tasks
 
-* Instead of using the image `alpine:3.7`, we now want to use a docker image that has both JDK and Gradle installed. CircleCI provides one called `circleci/openjdk:8-jdk`, so add that to your config file.
+* Instead of using the image `alpine:3.7`, we now want to use a docker image that has both JDK and Gradle installed. In the image section, replace the alpine image with `gradle:jdk11`
 * Under the `steps` part, add a `- checkout` list item to the list before the existing ` - run:` item.
-* Change the `run` command from the multi-line linux bash script to just run `gradle test` as the command.
+* Change the `run` command from the multi-line linux bash script to just run `ci/build-app.sh` as the command.
 * Commit and push the changes. CircleCI should automatically detect your new commit and build again. See that the build runs green and outputs this in the step log:
 
 ```bash
@@ -141,17 +140,16 @@ To store test results in CircleCI use the following syntax:
 CircleCI supports a few different test report formats.
 https://circleci.com/docs/2.0/configuration-reference/#store_test_results
 
-Hint: The results of running `gradle test` are stored in a local directory: `build/test-results`.
+### Tasks
+
+* make a second `- run:` step with the command `ci/unit-test-app.sh`.
+* store the outputted test results
+
+> Hint: The results of running `ci/unit-test-app.sh` are stored in a local directory: `app/build/test-results`.
 
 If all works as intended, you should see something like ![test results screenshot](img/test-results.png).
 
-## Run a few iterations on the code
-
-Having your pipeline set up, now it is time to fix the software problem itself. Go back to [the gilded rose description to read about it](gildedrose.md)
-
-## Building and storing artifacts
-
-To build a jar file run `gradle jar`.
+## Storing artifacts
 
 It is possible to store artifacts in CircleCI.
 
@@ -161,7 +159,7 @@ To store artifacts use the following syntax:
 
 ```YAML
 - store_artifacts:
-    path: /code/test-results
+    path: /code/artifact
     destination: prefix
 ```
 
@@ -170,13 +168,11 @@ https://circleci.com/docs/2.0/configuration-reference/#store_artifacts
 
 When you have larger or more complex projects, you’ll want separate jobs to do separate things (i.e. build vs. test). Despite the fact our example project is super simple, we will divide the workload to demonstrate the functionality.
 
-Up until now, we have had a job called `build` for the `gradle test`, but that is not really the correct phrasing. The only reason we have done this, is because CircleCI **requires** you to have one job called `build`
+Up until now, we have had a job called `build` both for the build and test, but that is not really the correct phrasing. The only reason we have done this, is because CircleCI **requires** you to have one job called `build`
 
 ### Tasks
 
-1. Add another `run` step to your `build` job that runs `gradle jar`, then add a step that stores the artifact it produces.
-
-> Hint: The results of running `gradle jar` are actually stored in a local directory: `build/libs`
+> Hint: The results of running `ci/build-app.sh` are actually stored in a local directory: `app/build/libs`
 
 If all works out fine, your newest build should show something like:
 ![stored artifacts screenshot](img/artifact.png)
@@ -248,14 +244,13 @@ workflows:
 
 > All about workflows: https://circleci.com/docs/2.0/workflows/
 
-
 ### Tasks
 Let's try to clean up our current build by utilizing a feature called workflows.
 
 1. Make another job in the CircleCI config, that is a plain copy of the first one.
-2. Rename the first job to `test`.
-3. Make a `test` job that builds and tests the code, and stores the test results.
-4. Make a `package` job that assembles the jar file and stores this artifact.
+2. Rename the first job to `test`, so you have a `test` job and a `build` job.
+3. The `test` job runs the tests the code, and stores the test results.
+4. The `build` will build the code, and store the artifact
 
 If you don't do anything else, you will notice that your CircleCI build fails, as it is still looking for a default job called `build` so let's add the needed `workflows` section. You should be able to do this based on the sample code above.
 
@@ -267,44 +262,96 @@ Opening it should show something like:
 
 ![Screenshot workflow](img/workflow-screenshot.png)
 
+## Workspaces
+
+Every time you switch jobs in CircleCI, the container that runs the jobs gets destroyed at the end of the job.
+
+A `workspace` can be used to store files, which can then be retrieved and used by downstream jobs. Workspaces are only transferred within the same workflow.
+
+In order to reuse artifacts from one job to the next, you need to persist to a workspace and attach the workspace on the following jobs.
+
+Let's take this folder structure as an example:
+
+```bash
+.
+├── README.md
+└── test
+    ├── 1
+    │   └── 1.txt
+    ├── 2
+    │   └── 2.txt
+    └── textfile.txt
+
+```
+
+The syntax to persist files is the following:
+
+```YAML
+- persist_to_workspace:
+    root: test #the folder to start the workspace from.
+    paths: 
+      - 1 #if you want the files inside the 1 folder to be persisted.
+      - . #if you want all of test to be persisted in the workspace. Note: Do not use both path examples, since `1` is also in `.` path
+```
+
+> More information can be found here: https://circleci.com/docs/2.0/configuration-reference/#persist_to_workspace
+
+And to "attach" the workspace in a downstream job:
+
+```YAML
+- attach_workspace:
+    at: /tmp/workspace
+```
+
+This will make a folder in `/tmp/workspace` where the persisted files are stored, and you can use them in the job.
+
+> More information can be found here: https://circleci.com/docs/2.0/configuration-reference/#attach_workspace
+
+This is essential to store a build artifact when it is first build, to avoid having to rebuild the artifact in downstream jobs.
+
+> All about workspaces: https://circleci.com/docs/2.0/workflows/#using-workspaces-to-share-data-among-jobs
+
+### Tasks
+
+* Make a new job that is called `clone down` that only has the `-checkout` step
+* Delete the `checkout` from both test and build.
+* Make both build and test require that clone down is run before.
+* Make sure that your job checking out the repository code is persisting to the workspace, and that all other jobs needing the source code are attaching that workspace
+
 ## Making docker images
 
 Often we also want to have our application packaged as a docker image for easy distribution. Lucky for us, CircleCI has nice support for Docker built in.
 
-The following is an example of a job that builds a Docker image. Instead of specifying a `image` to run on, we now use a `machine: true` instruction to give us an environment where we can run actual docker commands:
+The following is an example of a job that builds a Docker image. Instead of specifying a `docker: image` to run on, we now use a `machine: image` instruction to give us an environment where we can run actual docker commands:
 
 ```YAML
 version: 2
 jobs:
  dockerize:
-   machine: true
+   machine:
+    image: ubuntu-1604:201903-01
    steps:
      - checkout
      # Login to docker
-     - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+     - run: docker login -u $docker_username -p $docker_password
 
      # build the application image
-     - run: docker build -t $DOCKER_USER/myapp:$CIRCLE_SHA1 .
+     - run: docker build -t $docker_username/myapp:$CIRCLE_SHA1 .
 
      # deploy the image
-     - run: docker push $DOCKER_USER/myapp:$CIRCLE_SHA1
+     - run: docker push $docker_username/myapp:$CIRCLE_SHA1
 ```
 
-If you wanted to try this on the GilderRose project, you would have to complete the snippet and integrate this build step in the existing workflow.
+If you wanted to try this on the project, we have made two scripts: `ci/build-docker.sh` and `ci/push-docker.sh`
+In order for this to work, two env. variables needs to be set: `docker_username` and `docker_password`.
 
-**Don't forget to add a** `Dockerfile` to the root of your project as well. Something as simple as:
+### Tasks
 
-```bash
-FROM alpine
-ENTRYPOINT echo "Hello Whale!"
-```
+* make a new job named `Build docker` that requires the build job has been run, and run the `ci/build-docker.sh` 
 
-would do for now as a proof of concept, as the Gilded Rose project isn't really runable anyway.
-
-> Hint: We know that the Gilded rose is not an application that you can "run". So in order to "play" that it works, just add the src folder in the image, and make a ENTRYPOINT that list the folder inside your container.
+> Optional: There is also a `ci/push-docker.sh` script, that require your docker username and password as env, and a `ci/component-test.sh` script that runs a docker-compose file with component tests.
 
 > Hint: You can find lots of information about `$CIRCLE_SHA1` and the other environment variables provided by CircleCI in https://circleci.com/docs/2.0/env-vars/ and https://circleci.com/docs/2.0/env-vars/#built-in-environment-variables
-
 
 # Extra topics
 
@@ -343,30 +390,3 @@ Retrieving the cache is done with:
 CircleCI does NOT do anything to make sure the dependencies are actually downloaded when storing the cache. So it is important to use these keywords in the right order.
 
 > All about caching: https://circleci.com/docs/2.0/caching/
-
-### Workspaces
-
-A `workspace` can be used to store files, which can then be retrieved and used by downstream jobs. Workspaces are only transferred within the same workflow, and not between builds like caching.
-
-```YAML
-- persist_to_workspace:
-    root: /tmp/dir
-    paths:
-      - foo/bar
-      - baz
-```
-
-> https://circleci.com/docs/2.0/configuration-reference/#persist_to_workspace
-
-And to "attach" the workspace in a downstream job:
-
-```YAML
-- attach_workspace:
-    at: /tmp/workspace
-```
-
-> https://circleci.com/docs/2.0/configuration-reference/#attach_workspace
-
-This is very useful to store a build artifact when it is first build, to avoid having to rebuild the artifact in downstream jobs.
-
-> All about workspaces: https://circleci.com/docs/2.0/workflows/#using-workspaces-to-share-data-among-jobs
